@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
-import '../models/usuario.dart';
+
 
 class RealizarAgendamentoScreen extends StatelessWidget {
+  const RealizarAgendamentoScreen({super.key});
+
 
   @override
   Widget build(BuildContext context) {

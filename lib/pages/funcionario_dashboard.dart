@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'agenda.dart';
 import 'realizar_agendamento.dart';
-import 'cliente_dashboard.dart';
 
 class FuncionarioDashboard extends StatefulWidget {
   final String userType; // Tipo de usuário (cliente ou funcionário)
   final String userName;
 
-  FuncionarioDashboard ({required this.userType, required this.userName});
+  const FuncionarioDashboard ({super.key, required this.userType, required this.userName});
 
   @override
   _FuncionarioDashboardState createState() => _FuncionarioDashboardState();
@@ -20,6 +19,7 @@ class _FuncionarioDashboardState extends State<FuncionarioDashboard > {
     RealizarAgendamentoScreen(),
     AgendaScreen(userType: '', userName: '',),
   ];
+
 
   void _onItemTapped(int index) {
     setState(() {

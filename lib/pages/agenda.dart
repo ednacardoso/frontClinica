@@ -6,25 +6,24 @@ class AgendaScreen extends StatelessWidget {
   final String userType; // Tipo de usuário (cliente, funcionário, administrador)
   final String userName; // Nome do cliente ou funcionário
 
-  AgendaScreen({required this.userType, required this.userName});
+  const AgendaScreen({super.key, required this.userType, required this.userName});
 
   // Método para buscar agendamentos da API
-  Future<List<Map<String, String>>> fetchAgendamentos() async {
-  final response = await http.get(Uri.parse('http://localhost:5118/api/agendamentos'));
+  Future<List<Map<String, dynamic>>> fetchAgendamentos() async {
+    try {
+      final response = await http.get(Uri.parse('http://localhost:5118/api/agenda')); // Use o IP correto
 
-  if (response.statusCode == 200) {
-    final data = jsonDecode(response.body);
-
-    // Certifique-se de que os valores dentro dos mapas são Strings
-    return List<Map<String, String>>.from(data.map((item) => {
-          'id': item['id'] as int,
-          'descricao': item['descricao'] as String,
-        }));
-  } else {
-    throw Exception('Erro ao buscar agendamentos');
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return List<Map<String, dynamic>>.from(data);
+      } else {
+        throw Exception('Erro ao buscar agendamentos: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Erro de conexão: $e'); // Log para depuração
+      throw Exception('Erro de conexão: Verifique se o servidor está rodando');
+    }
   }
-}
-
 
   @override
   Widget build(BuildContext context) {
@@ -33,7 +32,7 @@ class AgendaScreen extends StatelessWidget {
         title: const Text('Agenda'),
         backgroundColor: const Color.fromARGB(255, 18, 196, 187),
       ),
-      body: FutureBuilder<List<Map<String, String>>>(
+      body: FutureBuilder<List<Map<String, dynamic>>>(
         future: fetchAgendamentos(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -53,20 +52,32 @@ class AgendaScreen extends StatelessWidget {
             );
           } else {
             final agendamentos = snapshot.data!;
+            print('Agendamentos recebidos: $agendamentos'); // Log para depurar
 
             // Filtrar os agendamentos com base no tipo de usuário
-            final List<Map<String, String>> agendamentosFiltrados =
+            // Replace the existing filtering logic with this:
+            final List<Map<String, dynamic>> agendamentosFiltrados =
                 userType == 'administrador'
                     ? agendamentos
                     : userType == 'funcionario'
                         ? agendamentos
                             .where((agendamento) =>
-                                agendamento['funcionario'] == userName)
+                                agendamento['status'] == 'agendado')
                             .toList()
                         : agendamentos
                             .where((agendamento) =>
                                 agendamento['cliente'] == userName)
                             .toList();
+
+
+            if (agendamentosFiltrados.isEmpty) {
+              return const Center(
+                child: Text(
+                  'Nenhum agendamento correspondente encontrado.',
+                  style: TextStyle(fontSize: 16),
+                ),
+              );
+            }
 
             return ListView.builder(
               itemCount: agendamentosFiltrados.length,
@@ -81,7 +92,7 @@ class AgendaScreen extends StatelessWidget {
                   child: ListTile(
                     contentPadding: const EdgeInsets.all(16),
                     title: Text(
-                      agendamento['cliente']!,
+                      agendamento['cliente'] ?? 'Cliente não informado',
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -90,17 +101,17 @@ class AgendaScreen extends StatelessWidget {
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text("Funcionário: ${agendamento['funcionario']}"),
-                        Text("Data: ${agendamento['dataAgendamento']}"),
-                        Text("Status: ${agendamento['Status']}"),
-                        Text("Observações: ${agendamento['observacoes']}"),
+                        Text("Funcionário: ${agendamento['funcionario'] ?? 'Não informado'}"),
+                        Text("Data: ${agendamento['dataAgendamento'] ?? 'Sem data'}"),
+                        Text("Status: ${agendamento['status'] ?? 'Desconhecido'}"),
+                        Text("Observações: ${agendamento['observacoes'] ?? 'Sem observações'}"),
                       ],
                     ),
                     trailing: Icon(
-                      agendamento['Status'] == 'Agendado'
+                      agendamento['status'] == 'agendado'
                           ? Icons.event_available
                           : Icons.event_busy,
-                      color: agendamento['Status'] == 'Agendado'
+                      color: agendamento['status'] == 'agendado'
                           ? Colors.green
                           : Colors.red,
                     ),

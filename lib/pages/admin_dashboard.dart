@@ -1,23 +1,24 @@
 import 'package:flutter/material.dart';
-import 'realizar_agendamento.dart';
 import 'agenda.dart';
+import 'realizar_agendamento.dart';
 
-class ClienteDashboard extends StatefulWidget {
+class AdminDashboard extends StatefulWidget {
   final String userType; // Tipo de usuário (cliente ou funcionário)
   final String userName;
+  final bool isLoggedIn;  // Add this line
 
-  const ClienteDashboard({super.key, required this.userType, required this.userName});
+  const AdminDashboard ({super.key, required this.userType, required this.userName, required this.isLoggedIn, });
 
   @override
-  _ClienteDashboardState createState() => _ClienteDashboardState(); // Implementação do createState
+  _AdminDashboardState createState() => _AdminDashboardState();
 }
 
-class _ClienteDashboardState extends State<ClienteDashboard> {
+class _AdminDashboardState extends State<AdminDashboard> {
   int _selectedIndex = 0;
 
   final List<Widget> _pages = [
     RealizarAgendamentoScreen(),
-    AgendaScreen(userType: '', userName: '',), // Passar os parâmetros corretos aqui
+    AgendaScreen(userType: '', userName: '',),
   ];
 
   void _onItemTapped(int index) {
@@ -30,7 +31,7 @@ class _ClienteDashboardState extends State<ClienteDashboard> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("Bem-vindo, ${widget.userName}"), // Acessando os parâmetros passados
+        title: Text("Bem-vindo, ${widget.userName}!"), // Changed this line
         backgroundColor: const Color.fromARGB(255, 18, 196, 187),
       ),
       body: _pages[_selectedIndex],
@@ -52,3 +53,4 @@ class _ClienteDashboardState extends State<ClienteDashboard> {
     );
   }
 }
+

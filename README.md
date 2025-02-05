@@ -1,6 +1,6 @@
-# my_project
+# Front Clínica Lótus
 
-A new Flutter project.
+Front da Clínica Lótus feito em flutter. O backend encontra-se nesse github, também. 
 
 ## Getting Started
 

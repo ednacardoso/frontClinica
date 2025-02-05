@@ -36,51 +36,64 @@ class _LoginScreenState extends State<LoginScreen> {
         'SenhaHash': password,
       }),
     );
+      if (response.statusCode == 200) {        
 
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
+        final data = json.decode(response.body);
+        // In your login screen after successful authentication:
+        await _storage.write(key: 'userRole', value: 'administrador');
+        await _storage.write(key: 'userRole', value: 'cliente');
+        await _storage.write(key: 'userRole', value: 'funcionario');
+        // Save JWT token
+        await _storage.write(key: 'jwt_token', value: data['token']);
+        // Save user role
+        await _storage.write(key: 'userRole', value: data['tipo']);
+        // Save user name
+        await _storage.write(key: 'userName', value: data['nome']);
+        // Save client ID if present
+        if (data['clienteId'] != null) {
+            await _storage.write(key: 'clienteId', value: data['clienteId'].toString());
+        }
 
-      // Salve o token JWT no armazenamento seguro
-      await _storage.write(key: 'jwt_token', value: data['token']);
+        // Determine o tipo de usuário e redirecione para o dashboard correto
+        String userType = determineUserType(email);
+        String userName = email.split('@')[0]; // Get username from email
 
-      // Determine o tipo de usuário e redirecione para o dashboard correto
-      String userType = determineUserType(email);
-      String userName = email.split('@')[0]; // Get username from email
-
-      if (userType == 'cliente') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => ClienteDashboard(
-                userType: userType,
-                userName: userName, 
+        if (userType == 'cliente') {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ClienteDashboard(
+                  userType: userType,
+                  userName: userName, 
+                ),
               ),
-            ),
-          );
-        } else if (userType == 'funcionario') {
-          Navigator.pushReplacement(
+            );
+          } else if (userType == 'funcionario') {
+            Navigator.pushReplacement(
             context,
             MaterialPageRoute(
               builder: (context) => FuncionarioDashboard(
                 userType: userType,
-                userName: userName, 
+                userName: userName,
+                isLoggedIn: true,  // Add this line
               ),
             ),
           );
-        }
-        else {
+
+          }
+          else if (userType == 'administrador'){
         
-        Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => AdminDashboard(
-            userType: userType,
-            userName: userName,
-            isLoggedIn: true,
+          Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => AdminDashboard(
+              userType: userType,
+              userName: userName,
+              isLoggedIn: true,
+            ),
           ),
-        ),
-      );
-    }
+        );
+      }
     } else {     
       showDialog(
         context: context,
@@ -101,13 +114,15 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   String determineUserType(String email) {
-    if (email.toLowerCase().contains('@funcionario.com')) {
-      return 'funcionario';
-    } else if (email.toLowerCase().contains('@admin.com')) {
-      return 'administrador';
-    }
-    return 'cliente';
+  final lowerEmail = email.toLowerCase();
+  if (lowerEmail.contains('@email.com') || lowerEmail.contains('@admin.com')) {
+    return 'administrador';
+  } else if (lowerEmail.contains('@funcionario.com')) {
+    return 'funcionario';
   }
+  return 'cliente';
+}
+
 
   @override
   Widget build(BuildContext context) {

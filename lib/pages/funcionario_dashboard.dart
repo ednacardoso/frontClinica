@@ -5,8 +5,9 @@ import 'realizar_agendamento.dart';
 class FuncionarioDashboard extends StatefulWidget {
   final String userType; // Tipo de usuário (cliente ou funcionário)
   final String userName;
+  final bool isLoggedIn;  // Add this line
 
-  const FuncionarioDashboard ({super.key, required this.userType, required this.userName});
+  const FuncionarioDashboard ({super.key, required this.userType, required this.userName, required this.isLoggedIn, });
 
   @override
   _FuncionarioDashboardState createState() => _FuncionarioDashboardState();
@@ -30,8 +31,9 @@ class _FuncionarioDashboardState extends State<FuncionarioDashboard > {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Bem-vindo(a) ao app da Lótus!'),
-        backgroundColor: const Color.fromARGB(255, 18, 196, 187),
+      title: Text("Bem-vindo(a) ao app da Lótus! - Funcionário ${widget.userName}"),
+      backgroundColor: const Color.fromARGB(255, 18, 196, 187),
+
       ),
       body: _pages[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(

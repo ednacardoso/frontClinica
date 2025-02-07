@@ -5,6 +5,7 @@ import 'cliente_dashboard.dart';
 import 'funcionario_dashboard.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'admin_dashboard.dart';
+import 'dart:async';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -18,111 +19,117 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _isPasswordVisible = false;
-  final _storage = FlutterSecureStorage(); // Para armazenar o token
-  bool isLoggedIn = false;  // Add this line  
+  final _storage = FlutterSecureStorage();
+  bool isLoggedIn = false;
+  Timer? _timer;
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
 
   // Função para autenticar o usuário
   Future<void> _login() async {
-    final email = _emailController.text;
-    final password = _passwordController.text;    
+  final email = _emailController.text;
+  final password = _passwordController.text;
 
-    final url = Uri.parse('http://localhost:5118/api/auth/login'); // Coloque a URL da sua API de login
+  final url = Uri.parse('http://localhost:5118/api/auth/login');
 
-    final response = await http.post(
-      url,
-      headers: {'Content-Type': 'application/json'},
-      body: json.encode({
-        'email': email,
-        'SenhaHash': password,
-      }),
-    );
-      if (response.statusCode == 200) {        
+  final response = await http.post(
+    url,
+    headers: {'Content-Type': 'application/json'},
+    body: json.encode({
+      'email': email,
+      'SenhaHash': password,
+    }),
+  );
 
-        final data = json.decode(response.body);
-        // In your login screen after successful authentication:
-        await _storage.write(key: 'userRole', value: 'administrador');
-        await _storage.write(key: 'userRole', value: 'cliente');
-        await _storage.write(key: 'userRole', value: 'funcionario');
-        // Save JWT token
-        await _storage.write(key: 'jwt_token', value: data['token']);
-        // Save user role
-        await _storage.write(key: 'userRole', value: data['tipo']);
-        // Save user name
-        await _storage.write(key: 'userName', value: data['nome']);
-        // Save client ID if present
-        if (data['clienteId'] != null) {
-            await _storage.write(key: 'clienteId', value: data['clienteId'].toString());
-        }
+  if (response.statusCode == 200) {
+    if (!mounted) return; // Verifica se o widget ainda está montado
 
-        // Determine o tipo de usuário e redirecione para o dashboard correto
-        String userType = determineUserType(email);
-        String userName = email.split('@')[0]; // Get username from email
+    final data = json.decode(response.body);
 
-        if (userType == 'cliente') {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (context) => ClienteDashboard(
-                  userType: userType,
-                  userName: userName, 
-                ),
-              ),
-            );
-          } else if (userType == 'funcionario') {
-            Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => FuncionarioDashboard(
-                userType: userType,
-                userName: userName,
-                isLoggedIn: true,  // Add this line
-              ),
-            ),
-          );
+    // Depuração: Verifique a estrutura do JSON retornado
+    print(data);
 
-          }
-          else if (userType == 'administrador'){
-        
-          Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => AdminDashboard(
-              userType: userType,
-              userName: userName,
-              isLoggedIn: true,
-            ),
+    // Extrair valores do JSON
+    final user = data['user']; // Acesse o objeto 'user'
+    String userType = user['tipo'] ?? 'cliente'; // Tipo de usuário
+    String userName = user['nome'] ?? 'Usuário'; // Nome do usuário
+    int userId = user['id'] ?? 0; // ID do usuário
+
+    // Salvar JWT token
+    await _storage.write(key: 'jwt_token', value: data['token'] ?? '');
+
+    // Salvar user role
+    await _storage.write(key: 'userRole', value: userType);
+
+    // Salvar user name
+    await _storage.write(key: 'userName', value: userName);
+
+    // Salvar userId
+    await _storage.write(key: 'userId', value: userId.toString());
+
+    // Redirecionar para o dashboard correto
+    if (userType == 'cliente') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ClienteDashboard(
+            userType: userType,
+            userName: userName,
+            userId: userId,
           ),
-        );
-      }
-    } else {     
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text('Erro de login'),
-          content: Text('Usuário ou senha incorretos'),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: Text('OK'),
-            ),
-          ],
+        ),
+      );
+    } else if (userType == 'funcionario') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => FuncionarioDashboard(
+            userType: userType,
+            userName: userName,
+            isLoggedIn: true,
+            userId: userId,
+          ),
+        ),
+      );
+    } else if (userType == 'administrador') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => AdminDashboard(
+            userType: userType,
+            userName: userName,
+            isLoggedIn: true,
+            userId: userId, // Add this parameter
+          ),
         ),
       );
     }
-  }
+  } else {
+    if (!mounted) return; // Verifica se o widget ainda está montado
 
-  String determineUserType(String email) {
-  final lowerEmail = email.toLowerCase();
-  if (lowerEmail.contains('@email.com') || lowerEmail.contains('@admin.com')) {
-    return 'administrador';
-  } else if (lowerEmail.contains('@funcionario.com')) {
-    return 'funcionario';
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Erro de login'),
+        content: Text('Usuário ou senha incorretos'),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+            child: Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
-  return 'cliente';
 }
-
 
   @override
   Widget build(BuildContext context) {
@@ -161,8 +168,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Por favor, insira o e-mail.';
-                    } else if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
-                        .hasMatch(value)) {
+                    } else if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
                       return 'Por favor, insira um e-mail válido.';
                     }
                     return null;
@@ -178,9 +184,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     prefixIcon: Icon(Icons.lock),
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _isPasswordVisible
-                            ? Icons.visibility
-                            : Icons.visibility_off,
+                        _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
                       ),
                       onPressed: () {
                         setState(() {

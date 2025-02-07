@@ -5,32 +5,51 @@ import 'agenda.dart';
 class ClienteDashboard extends StatefulWidget {
   final String userType; // Tipo de usuário (cliente ou funcionário)
   final String userName;
+  final int userId; // Adiciona o userId
 
-  const ClienteDashboard({super.key, required this.userType, required this.userName});
+  const ClienteDashboard({
+    super.key,
+    required this.userType,
+    required this.userName,
+    required this.userId, // Passa o userId
+  });
 
   @override
-  _ClienteDashboardState createState() => _ClienteDashboardState(); // Implementação do createState
+  _ClienteDashboardState createState() => _ClienteDashboardState();
 }
 
 class _ClienteDashboardState extends State<ClienteDashboard> {
   int _selectedIndex = 0;
+  late List<Widget> _pages; // Use 'late' para inicializar no initState
 
-  final List<Widget> _pages = [
-    RealizarAgendamentoScreen(),
-    AgendaScreen(userType: '', userName: '',), // Passar os parâmetros corretos aqui
-  ];
-
-  void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
+  @override
+  void initState() {
+    super.initState();
+    // Inicialize _pages no initState para acessar os parâmetros do widget
+    _pages = [
+      RealizarAgendamentoScreen(
+        userType: widget.userType,
+        userId: widget.userId,
+      ),
+      AgendaScreen(
+        userType: widget.userType,
+        userName: widget.userName,
+        userId: widget.userId,
+      ),
+    ];
   }
 
+  void _onItemTapped(int index) {
+      setState(() {
+        _selectedIndex = index;
+      });
+    }
+    
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("Bem-vindo, ${widget.userName}"), // Acessando os parâmetros passados
+        title: Text("Bem-vindo, Cliente ${widget.userName}"),
         backgroundColor: const Color.fromARGB(255, 18, 196, 187),
       ),
       body: _pages[_selectedIndex],

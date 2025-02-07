@@ -3,11 +3,18 @@ import 'agenda.dart';
 import 'realizar_agendamento.dart';
 
 class AdminDashboard extends StatefulWidget {
-  final String userType; // Tipo de usuário (cliente ou funcionário)
+  final String userType;
   final String userName;
-  final bool isLoggedIn;  // Add this line
+  final bool isLoggedIn;
+  final int userId;  // Add this field
 
-  const AdminDashboard ({super.key, required this.userType, required this.userName, required this.isLoggedIn, });
+  const AdminDashboard({
+    Key? key,
+    required this.userType,
+    required this.userName,
+    required this.isLoggedIn,
+    required this.userId,  // Add this parameter
+  }) : super(key: key);
 
   @override
   _AdminDashboardState createState() => _AdminDashboardState();
@@ -15,11 +22,19 @@ class AdminDashboard extends StatefulWidget {
 
 class _AdminDashboardState extends State<AdminDashboard> {
   int _selectedIndex = 0;
+  late List<Widget> _pages;
 
-  final List<Widget> _pages = [
-    RealizarAgendamentoScreen(),
-    AgendaScreen(userType: '', userName: '',),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _pages = [
+      RealizarAgendamentoScreen(
+        userType: widget.userType,
+        userId: widget.userId,
+      ),
+      AgendaScreen(userType: widget.userType, userName: widget.userName, userId: widget.userId),
+    ];
+  }
 
   void _onItemTapped(int index) {
     setState(() {
@@ -31,7 +46,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("Bem-vindo, ${widget.userName}!"), // Changed this line
+        title: Text("Bem-vindo, Administrador ${widget.userName}!"), // Changed this line
         backgroundColor: const Color.fromARGB(255, 18, 196, 187),
       ),
       body: _pages[_selectedIndex],

@@ -4,7 +4,15 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class RealizarAgendamentoScreen extends StatefulWidget {
-  const RealizarAgendamentoScreen({super.key});
+  final String userType; // Tipo de usuário (cliente, funcionário, administrador)
+  final int userId; // ID do usuário logado
+  
+
+  const RealizarAgendamentoScreen({
+    super.key,    
+    required this.userType,
+    required this.userId,
+  });
 
   @override
   State<RealizarAgendamentoScreen> createState() => _RealizarAgendamentoScreenState();
@@ -12,7 +20,6 @@ class RealizarAgendamentoScreen extends StatefulWidget {
 
 class _RealizarAgendamentoScreenState extends State<RealizarAgendamentoScreen> {
   List<Map<String, dynamic>> funcionarios = [];
-  int? userId;
   int? funcionarioSelecionado;
   int? clienteSelecionado;
   DateTime? dataAgendamento;
@@ -24,14 +31,20 @@ class _RealizarAgendamentoScreenState extends State<RealizarAgendamentoScreen> {
   String? userRole; // Add this to track user role
   List<Map<String, dynamic>> clients = []; // Add this for admin to select clients 
 
- 
   @override
   void initState() {
-  super.initState();
-  _getUserRole();
-  carregarFuncionarios();
-  carregarClientes(); // Load clients immediately for admin
-}
+    super.initState();
+    _getUserRole();
+    carregarFuncionarios();
+
+    // Se o usuário for um cliente, define o clienteSelecionado como o userId
+    if (widget.userType == 'cliente') {
+      clienteSelecionado = widget.userId;
+    } else {
+      // Se for administrador ou funcionário, carrega a lista de clientes
+      carregarClientes();
+    }
+  }
 
   Future<void> _getUserRole() async {
     final prefs = await SharedPreferences.getInstance();    
@@ -41,36 +54,46 @@ class _RealizarAgendamentoScreenState extends State<RealizarAgendamentoScreen> {
     setState(() {
       userRole = role;
     });
-    
-    if (role == 'administrador') { 
-      await carregarClientes();
+  }
+
+ Future<void> carregarClientes() async {
+  final response = await http.get(Uri.parse('http://localhost:5118/api/clientes'));
+  print("Resposta da API de clientes: ${response.body}");
+
+  if (response.statusCode == 200) {
+    final Map<String, dynamic> data = json.decode(response.body);
+
+    if (data.containsKey("\$values") && data["\$values"] is List) {
+      setState(() {
+        clients = List<Map<String, dynamic>>.from(data["\$values"]);
+      });
+    } else {
+      throw Exception('Formato inesperado da resposta da API de clientes');
     }
+  } else {
+    throw Exception('Erro ao carregar clientes');
+  }
 }
 
-
-  Future<void> carregarClientes() async {
-    final response = await http.get(Uri.parse('http://localhost:5118/api/clientes'));
-    print("Resposta da API de clientes: ${response.body}");
-
-    if (response.statusCode == 200) {
-      setState(() {
-        clients = List<Map<String, dynamic>>.from(json.decode(response.body));
-      });
-    } else {
-      throw Exception('Erro ao carregar clientes');
-    }
-  }  
   Future<void> carregarFuncionarios() async {
-    final response = await http.get(Uri.parse('http://localhost:5118/api/funcionarios'));
+  final response = await http.get(Uri.parse('http://localhost:5118/api/funcionarios'));
+  print("Resposta da API de funcionários: ${response.body}");
 
-    if (response.statusCode == 200) {
+  if (response.statusCode == 200) {
+    final Map<String, dynamic> data = json.decode(response.body);
+
+    if (data.containsKey("\$values") && data["\$values"] is List) {
       setState(() {
-        funcionarios = List<Map<String, dynamic>>.from(json.decode(response.body));
+        funcionarios = List<Map<String, dynamic>>.from(data["\$values"]);
       });
     } else {
-      throw Exception('Erro ao carregar funcionários');
+      throw Exception('Formato inesperado da resposta da API de funcionários');
     }
+  } else {
+    throw Exception('Erro ao carregar funcionários');
   }
+}
+
 
   Future<void> selecionarData(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
@@ -102,27 +125,27 @@ class _RealizarAgendamentoScreenState extends State<RealizarAgendamentoScreen> {
 
   void enviarAgendamento() async {
   try {
-
     print("Cliente selecionado antes do envio: $clienteSelecionado");
     print("Função enviarAgendamento() foi chamada!");
 
     int clienteId;
-    if (userRole == 'administrador' || userRole == 'funcionario') {
-      print("Usuário é admin/funcionário.");
+    if (widget.userType == 'cliente') {
+      // Se o usuário for um cliente, usa o userId como clienteId
+      clienteId = widget.userId;
+    } else {
+      // Se for administrador ou funcionário, usa o cliente selecionado
       if (clienteSelecionado == null) {
         throw Exception('Por favor, selecione um cliente');
       }
       clienteId = clienteSelecionado!;
-    } else {
-      print("Usuário é cliente.");     
-    }   
+    }
 
     if (funcionarioSelecionado == null || dataAgendamento == null) {
       throw Exception("Preencha todos os campos obrigatórios!");
     }
 
     final agendamento = {
-      "clienteId": clienteSelecionado,
+      "clienteId": clienteId,
       "funcionarioId": funcionarioSelecionado,
       "dataAgendamento": dataAgendamento?.toUtc().toIso8601String(),
       "status": statusSelecionado.toLowerCase(),
@@ -155,7 +178,6 @@ class _RealizarAgendamentoScreenState extends State<RealizarAgendamentoScreen> {
   }
 }
 
-
   @override  
   Widget build(BuildContext context) {
     return Scaffold(
@@ -166,24 +188,26 @@ class _RealizarAgendamentoScreenState extends State<RealizarAgendamentoScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Client selection for admin
-              Text("Selecione um Cliente:", style: TextStyle(fontSize: 16)),
-              DropdownButton<int>(
-                value: clienteSelecionado,
-                hint: Text("Escolha um cliente:"),
-                onChanged: (int? newValue) {
-                  setState(() {
-                    clienteSelecionado = newValue;
-                  });
-                },
-                items: clients.map<DropdownMenuItem<int>>((cliente) {
-                  return DropdownMenuItem<int>(
-                    value: cliente["id"],
-                    child: Text(cliente["nome"]),
-                  );
-                }).toList(),
-              ),
-              SizedBox(height: 20),
+              // Client selection for admin and funcionario
+              if (widget.userType != 'cliente') ...[
+                Text("Selecione um Cliente:", style: TextStyle(fontSize: 16)),
+                DropdownButton<int>(
+                  value: clienteSelecionado,
+                  hint: Text("Escolha um cliente:"),
+                  onChanged: (int? newValue) {
+                    setState(() {
+                      clienteSelecionado = newValue;
+                    });
+                  },
+                  items: clients.map<DropdownMenuItem<int>>((cliente) {
+                    return DropdownMenuItem<int>(
+                      value: cliente["id"],
+                      child: Text(cliente["nome"]),
+                    );
+                  }).toList(),
+                ),
+                SizedBox(height: 20),
+              ],
 
               // Professional selection
               Text("Selecione um Funcionário:", style: TextStyle(fontSize: 16)),
@@ -261,7 +285,7 @@ class _RealizarAgendamentoScreenState extends State<RealizarAgendamentoScreen> {
               SizedBox(height: 20),
               Center(
                 child: ElevatedButton(
-                   onPressed: () {
+                  onPressed: () {
                     print("Botão Agendar foi pressionado!"); // Debug
                     enviarAgendamento();
                   },
@@ -273,4 +297,5 @@ class _RealizarAgendamentoScreenState extends State<RealizarAgendamentoScreen> {
         ),
       ),
     );
-  }}
+  }
+}

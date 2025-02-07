@@ -2,142 +2,239 @@ import 'package:flutter/material.dart';
 import 'dart:convert'; // Para trabalhar com JSON
 import 'package:http/http.dart' as http;
 
-class AgendaScreen extends StatelessWidget {
-  final String userType; // Tipo de usuário (cliente, funcionário, administrador)
-  final String userName; // Nome do cliente ou funcionário
-  final int? userId; // ID do usuário logado (opcional, para funcionários)
+class AgendaScreen extends StatefulWidget {
+  final String userType;
+  final String userName;
+  final int userId;
 
   const AgendaScreen({
     super.key,
     required this.userType,
     required this.userName,
-    this.userId,
+    required this.userId,
   });
 
-  // Método para buscar agendamentos da API
-  Future<List<Map<String, dynamic>>> fetchAgendamentos() async {
-    try {
-      final response = await http.get(Uri.parse('http://localhost:5118/api/agenda')); // Use o IP correto
+  @override
+  _AgendaScreenState createState() => _AgendaScreenState();
+}
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return List<Map<String, dynamic>>.from(data);
-      } else {
-        throw Exception('Erro ao buscar agendamentos: ${response.statusCode}');
-      }
-    } catch (e) {
-      print('Erro de conexão: $e'); // Log para depuração
-      throw Exception('Erro de conexão: Verifique se o servidor está rodando');
-    }
+class _AgendaScreenState extends State<AgendaScreen> {
+  late Future<List<Agendamento>> _agendamentos;
+
+  @override
+  void initState() {
+    super.initState();
+    _agendamentos = _getAgendamentos();
   }
 
-  // Método para filtrar agendamentos com base no tipo de usuário
-  List<Map<String, dynamic>> filtrarAgendamentos(List<Map<String, dynamic>> agendamentos) {
-    print("Current userType: '$userType'"); // Added quotes to see empty string
-    print("Current userId: $userId"); // Add this debug line
-    
-    // Add null/empty check
-    if (userType.isEmpty) {
-        return agendamentos; // Return all agendamentos if type is empty
+  Future<List<Agendamento>> _getAgendamentos() async {
+  final url = 'http://localhost:5118/api/agenda/usuario'; // Nova rota unificada
+  
+  try {
+    final response = await http.get(Uri.parse(url));
+    print("Resposta da API: ${response.body}");
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      
+      if (data is Map && data.containsKey("\$values")) {
+        return (data["\$values"] as List)
+            .map((item) => Agendamento.fromJson(item))
+            .toList();
+      }
+      
+      return (data as List)
+          .map((item) => Agendamento.fromJson(item))
+          .toList();
     }
-    
-    if (userType == 'administrador') {
-        return agendamentos;
-    } else if (userType == 'funcionario') {
-        return agendamentos.where((agendamento) => 
-            agendamento['funcionarioId'].toString() == userId.toString()).toList();
-    } else if (userType == 'cliente') {
-        return agendamentos.where((agendamento) => 
-            agendamento['cliente'] == userName).toList();
-    }
-    return agendamentos; // Default fallback
+    throw Exception('Erro na API: ${response.statusCode}');
+  } catch (e) {
+    print("Erro ao carregar agendamentos: $e");
+    throw Exception('Falha ao carregar os agendamentos');
+  }
 }
+
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Agenda'),
-        backgroundColor: const Color.fromARGB(255, 18, 196, 187),
-      ),
-      body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: fetchAgendamentos(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(),
-            );
-          } else if (snapshot.hasError) {
-            return Center(
-              child: Text('Erro: ${snapshot.error}'),
-            );
-          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return const Center(
-              child: Text(
-                'Nenhum agendamento disponível.',
-                style: TextStyle(fontSize: 16),
-              ),
-            );
-          } else {
-            final agendamentos = snapshot.data!;
-            print('Agendamentos recebidos: $agendamentos'); // Log para depurar
+    return FutureBuilder<List<Agendamento>>(
+      future: _agendamentos,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator());
+        } else if (snapshot.hasError) {
+          return Center(child: Text('Erro ao carregar agendamentos: ${snapshot.error}'));
+        } else if (snapshot.hasData) {
+          final agendamentos = snapshot.data!;
 
-            // Filtrar os agendamentos com base no tipo de usuário
-            final List<Map<String, dynamic>> agendamentosFiltrados =
-                filtrarAgendamentos(agendamentos);
+          if (agendamentos.isEmpty) {
+            return Center(child: Text('Nenhum agendamento encontrado.'));
+          }
 
-            if (agendamentosFiltrados.isEmpty) {
-              return const Center(
-                child: Text(
-                  'Nenhum agendamento correspondente encontrado.',
-                  style: TextStyle(fontSize: 16),
-                ),
-              );
-            }
-
-            return ListView.builder(
-              itemCount: agendamentosFiltrados.length,
-              itemBuilder: (context, index) {
-                final agendamento = agendamentosFiltrados[index];
-                return Card(
-                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  elevation: 4,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.all(16),
-                    title: Text(
-                      agendamento['cliente'] ?? 'Cliente não informado',
-                      style: const TextStyle(
+          return ListView.builder(
+            itemCount: agendamentos.length,
+            itemBuilder: (context, index) {
+              final agendamento = agendamentos[index];
+              return Card(
+                margin: EdgeInsets.all(8.0),
+                elevation: 4.0,
+                child: Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Agendamento com ${agendamento.clienteNome}',
+                      style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text("Funcionário: ${agendamento['funcionario'] ?? 'Não informado'}"),
-                        Text("Data: ${agendamento['dataAgendamento'] ?? 'Sem data'}"),
-                        Text("Status: ${agendamento['status'] ?? 'Desconhecido'}"),
-                        Text("Observações: ${agendamento['observacoes'] ?? 'Sem observações'}"),
-                      ],
-                    ),
-                    trailing: Icon(
-                      agendamento['status'] == 'agendado'
-                          ? Icons.event_available
-                          : Icons.event_busy,
-                      color: agendamento['status'] == 'agendado'
-                          ? Colors.green
-                          : Colors.red,
-                    ),
-                  ),
-                );
-              },
-            );
-          }
-        },
-      ),
+                    SizedBox(height: 8),
+                    Text('Profissional: ${agendamento.funcionarioNome}}'),
+                    Text('Data: ${agendamento.dataFormatada}'), // Usando data formatada
+                    Text('Status: ${agendamento.status}'),
+                    if (agendamento.observacoes.isNotEmpty)
+                      Text('Observações: ${agendamento.observacoes}'),
+                    if (agendamento.motivoCancelamento != null)
+                      Text('Motivo Cancelamento: ${agendamento.motivoCancelamento}'),
+                  ],
+                ),
+                                ),
+              );
+            },
+          );
+        } else {
+          return Center(child: Text('Nenhum agendamento encontrado.'));
+        }
+      },
+    );
+  }
+}
+
+class Agendamento {
+  final int id;
+  final DateTime dataAgendamento;
+  final String status;
+  final String observacoes;
+  final String? motivoCancelamento;
+  final int clienteId;
+  final int funcionarioId;
+  final Cliente clienteNome;
+  final String funcionarioNome;  
+
+  const Agendamento({
+    required this.id,
+    required this.dataAgendamento,
+    required this.status,
+    required this.observacoes,
+    this.motivoCancelamento,
+    required this.clienteId,
+    required this.funcionarioId,
+    required this.clienteNome,
+    required this.funcionarioNome,
+  });
+
+  factory Agendamento.fromJson(Map<String, dynamic> json) {
+    return Agendamento(
+      id: json['id'] ?? 0,
+      dataAgendamento: DateTime.parse(json['dataAgendamento'] ?? '2023-01-01T00:00:00Z'),
+      status: json['status'] ?? 'Ativo',
+      observacoes: json['observacoes'] ?? 'sem observações',
+      motivoCancelamento: json['motivoCancelamento'] ?? 'sem motivos',
+      clienteId: json['clienteId'] ?? 0,
+      funcionarioId: json['funcionarioId'] ?? 0,
+      clienteNome: json['clienteNome'] ?? 'Nome não informado',
+      funcionarioNome: json['funcionarioNome'] ?? 'Nome não informado',
+    );
+  }
+
+  String get dataFormatada {
+    return '${dataAgendamento.day}/${dataAgendamento.month}/${dataAgendamento.year} ${dataAgendamento.hour}:${dataAgendamento.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+class Cliente {
+  final int id;
+  final String nome;
+  final int userId;
+  final String cpf;
+  final String? apelido;
+  final String email;
+  final String telefone;
+  final DateTime dataCadastro;
+  final DateTime? dataNascimento;
+  final String descricao;
+
+  Cliente({
+    required this.id,
+    required this.nome,
+    required this.userId,
+    required this.cpf,
+    this.apelido,
+    required this.email,
+    required this.telefone,
+    required this.dataCadastro,
+    this.dataNascimento,
+    required this.descricao,
+  });
+
+  factory Cliente.fromJson(Map<String, dynamic> json) {
+    return Cliente(
+      id: json['id'] ?? 0,
+      nome: json['nome'],
+      userId: json['userId'] ?? 0,
+      cpf: json['cpf'] ?? 'CPF não disponível',
+      apelido: json['apelido'],
+      email: json['email'] ?? 'Email não disponível',
+      telefone: json['telefone'] ?? 'Telefone não disponível',
+      dataCadastro: DateTime.parse(json['dataCadastro'] ?? '2023-01-01T00:00:00Z'),
+      dataNascimento: json['dataNascimento'] != null ? DateTime.parse(json['dataNascimento']) : null,
+      descricao: json['descricao'] ?? 'Sem descrição',
+    );
+  }
+}
+
+class Funcionario {
+  final int id;
+  final String nome;
+  final int userId;
+  final String cpf;
+  final String especialidade;
+  final String? apelido;
+  final String email;
+  final String telefone;
+  final DateTime dataCadastro;
+  final DateTime? dataNascimento;
+  final String descricao;
+
+  Funcionario({
+    required this.id,
+    required this.nome,
+    required this.userId,
+    required this.cpf,
+    required this.especialidade,
+    this.apelido,
+    required this.email,
+    required this.telefone,
+    required this.dataCadastro,
+    this.dataNascimento,
+    required this.descricao,
+  });
+
+  factory Funcionario.fromJson(Map<String, dynamic> json) {
+    return Funcionario(
+      id: json['id'] ?? 0,
+      nome: json['nome'],
+      userId: json['userId'] ?? 0,
+      cpf: json['cpf'] ?? 'CPF não disponível',
+      especialidade: json['especialidade'] ?? 'Especialidade não disponível',
+      apelido: json['apelido'],
+      email: json['email'] ?? 'Email não disponível',
+      telefone: json['telefone'] ?? 'Telefone não disponível',
+      dataCadastro: DateTime.parse(json['dataCadastro'] ?? '2023-01-01T00:00:00Z'),
+      dataNascimento: json['dataNascimento'] != null ? DateTime.parse(json['dataNascimento']) : null,
+      descricao: json['descricao'] ?? 'Sem descrição',
     );
   }
 }

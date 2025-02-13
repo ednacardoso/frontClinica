@@ -64,6 +64,14 @@ class _LoginScreenState extends State<LoginScreen> {
     // Salvar JWT token
     await _storage.write(key: 'jwt_token', value: data['token'] ?? '');
 
+    final token = data['token'];
+    if (token is String) {
+      await _storage.write(key: 'jwt_token', value: token);
+    } else {
+      print("Erro: Token não é uma String - $token");
+    }
+
+
     // Salvar user role
     await _storage.write(key: 'userRole', value: userType);
 

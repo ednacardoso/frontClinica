@@ -21,18 +21,33 @@ class _GerenciarUsuariosScreenState extends State<GerenciarUsuariosScreen> {
   }
 
   Future<List<dynamic>> _carregarUsuarios() async {
-    final response = await http.get(
-      Uri.parse('http://localhost:5118/api/users'),
-      headers: {'Content-Type': 'application/json'},
-    );
+  final response = await http.get(
+    Uri.parse('http://localhost:5118/api/users'),
+    headers: {'Content-Type': 'application/json'},
+  );
 
-    if (response.statusCode == 200) {
-      final List<dynamic> data = json.decode(response.body);
-      return data;
+  if (response.statusCode == 200) {
+    final Map<String, dynamic> data = json.decode(response.body);
+
+    if (data.containsKey("\$values")) {
+      // Garante que os IDs sejam numéricos e não nulos
+      return (data["\$values"] as List).map((usuario) {
+        return {
+          "id": usuario["userId"] ?? 0, // Define 0 caso seja nulo
+          "nome": usuario["nome"] ?? "Sem Nome",
+          "email": usuario["email"] ?? "Sem Email",
+          "tipo": usuario["tipo"] ?? "desconhecido",
+        };
+      }).toList();
     } else {
-      throw Exception('Falha ao carregar usuários');
+      throw Exception('Formato inesperado na resposta da API');
     }
+  } else {
+    throw Exception('Falha ao carregar usuários');
   }
+}
+
+
 
   void _navegarParaTelaAdicao(BuildContext context, String tipo) {
     Navigator.push(

@@ -34,7 +34,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
   }
 
   Future<List<Agendamento>> _getAgendamentos() async {
-    final url = 'http://localhost:5118/api/agenda';
+    final url = 'http://localhost:5118/api/agenda/usuario';
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('auth_token') ?? '';
 
@@ -50,35 +50,47 @@ class _AgendaScreenState extends State<AgendaScreen> {
       debugPrint("Status Code: ${response.statusCode}");
       debugPrint("Resposta: ${response.body}");
 
+      if (response.statusCode == 401) {
+        throw Exception('Não autorizado. Faça login novamente.');
+      }
+
       if (response.statusCode == 404) {
         final errorData = json.decode(response.body);
         if (errorData['code'] == 'CLIENTE_NAO_CADASTRADO') {
           _redirectToCompleteProfile();
           throw ClientNotRegisteredException(errorData['message']);
         }
+        throw Exception('Recurso não encontrado');
       }
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        if (data is Map && data.containsKey("\$values")) {
-          return (data["\$values"] as List)
-              .map((item) => Agendamento.fromJson(item))
-              .toList();
+        debugPrint("Estrutura JSON: $data");
+
+        if (data is Map && data.containsKey("values")) {
+          final values = data["values"];
+          
+          if (values is Map && values.containsKey("\$values")) {
+            return (values["\$values"] as List)
+                .map((item) => Agendamento.fromJson(item))
+                .toList();
+          }
+        } 
+
+        if (data is List) {
+          return data.map((item) => Agendamento.fromJson(item)).toList();
         }
-        return (data as List)
-            .map((item) => Agendamento.fromJson(item))
-            .toList();
+
+        throw Exception('Formato de resposta inválido');
       }
-      throw Exception('Erro na API: ${response.statusCode}');
+
+
+      throw Exception('Erro na requisição: ${response.statusCode}');
     } catch (e) {
-      debugPrint("Erro ao carregar agendamentos: $e");
-      if (e is ClientNotRegisteredException) {
-        return [];
-      }
-      throw Exception('Falha ao carregar os agendamentos');
+      debugPrint("Erro ao buscar agendamentos: $e");
+      rethrow;
     }
   }
-
   void _redirectToCompleteProfile() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       showDialog(
@@ -169,24 +181,26 @@ class _AgendaScreenState extends State<AgendaScreen> {
 }
 
 class Agendamento {
-  final int clienteId;
-  final String clienteNome;
-  final String funcionarioNome;
-  final int funcionarioId;
+ final int id;
   final DateTime dataAgendamento;
   final String status;
-  final String? motivoCancelamento;
   final String observacoes;
+  final String? motivoCancelamento;
+  final int clienteId;
+  final String clienteNome;
+  final int funcionarioId;
+  final String funcionarioNome;
 
   const Agendamento({
-    required this.clienteId,
-    required this.clienteNome,
-    required this.funcionarioNome,
-    required this.funcionarioId,
+     required this.id,
     required this.dataAgendamento,
     required this.status,
-    this.motivoCancelamento,
     required this.observacoes,
+    this.motivoCancelamento,
+    required this.clienteId,
+    required this.clienteNome,
+    required this.funcionarioId,
+    required this.funcionarioNome,
   });
 
   String get dataFormatada {
@@ -198,17 +212,19 @@ class Agendamento {
   }
 
   factory Agendamento.fromJson(Map<String, dynamic> json) {
-    return Agendamento(
-      clienteId: json['userId'] ?? 0,
-      clienteNome: json['clienteNome'] ?? 'Cliente não informado',
-      funcionarioNome: json['funcionarioNome'] ?? 'Funcionário não informado',
-      funcionarioId: json['funcionarioId'] ?? 0,
-      dataAgendamento: DateTime.parse(json['dataAgendamento']),
-      status: json['status'] ?? 'ativo',
+  return Agendamento(
+     id: json['id'],
+      dataAgendamento: DateTime.parse(json['dataAgendamento']), // Convert string to DateTime
+      status: json['status'],
+      observacoes: json['observacoes'],
       motivoCancelamento: json['motivoCancelamento'],
-      observacoes: json['observacoes'] ?? '',
+      clienteId: json['clienteId'],
+      clienteNome: json['clienteNome'],
+      funcionarioId: json['funcionarioId'],
+      funcionarioNome: json['funcionarioNome'],
     );
   }
+
 }
 
 class AuthResponse {
@@ -263,10 +279,10 @@ class CompletaCadastroScreen extends StatefulWidget {
   final String tipoUsuario;
 
   const CompletaCadastroScreen({
-    Key? key,
+    super.key,
     required this.userId,
     required this.tipoUsuario,
-  }) : super(key: key);
+  });
 
   @override
   _CompletaCadastroScreenState createState() => _CompletaCadastroScreenState();

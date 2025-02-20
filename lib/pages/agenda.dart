@@ -34,48 +34,26 @@ class _AgendaScreenState extends State<AgendaScreen> {
   }
 
   Future<List<Agendamento>> _getAgendamentos() async {
-    final url = 'http://localhost:5118/api/agenda/usuario';
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('auth_token') ?? '';
 
     try {
       final response = await http.get(
-        Uri.parse(url),
+        Uri.parse('http://localhost:5118/api/agendamentos/usuario'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
       );
 
-      debugPrint("Status Code: ${response.statusCode}");
-      debugPrint("Resposta: ${response.body}");
-
-      if (response.statusCode == 401) {
-        throw Exception('Não autorizado. Faça login novamente.');
-      }
-
-      if (response.statusCode == 404) {
-        final errorData = json.decode(response.body);
-        if (errorData['code'] == 'CLIENTE_NAO_CADASTRADO') {
-          _redirectToCompleteProfile();
-          throw ClientNotRegisteredException(errorData['message']);
-        }
-        throw Exception('Recurso não encontrado');
-      }
-
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        debugPrint("Estrutura JSON: $data");
-
+        
         if (data is Map && data.containsKey("values")) {
-          final values = data["values"];
-          
-          if (values is Map && values.containsKey("\$values")) {
-            return (values["\$values"] as List)
-                .map((item) => Agendamento.fromJson(item))
-                .toList();
-          }
-        } 
+          return (data["values"] as List)
+              .map((item) => Agendamento.fromJson(item))
+              .toList();
+        }
 
         if (data is List) {
           return data.map((item) => Agendamento.fromJson(item)).toList();
@@ -84,38 +62,12 @@ class _AgendaScreenState extends State<AgendaScreen> {
         throw Exception('Formato de resposta inválido');
       }
 
-
       throw Exception('Erro na requisição: ${response.statusCode}');
     } catch (e) {
       debugPrint("Erro ao buscar agendamentos: $e");
       rethrow;
     }
-  }
-  void _redirectToCompleteProfile() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: Text('Cadastro Incompleto'),
-          content: Text('Você precisa completar seu cadastro para agendar.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => CompletaCadastroScreen(
-                    userId: widget.userId,
-                    tipoUsuario: widget.userType,
-                  ),
-                ),
-              ),
-              child: Text('Completar Cadastro'),
-            ),
-          ],
-        ),
-      );
-    });
-  }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -181,7 +133,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
 }
 
 class Agendamento {
- final int id;
+  final int id;
   final DateTime dataAgendamento;
   final String status;
   final String observacoes;
@@ -192,7 +144,7 @@ class Agendamento {
   final String funcionarioNome;
 
   const Agendamento({
-     required this.id,
+    required this.id,
     required this.dataAgendamento,
     required this.status,
     required this.observacoes,

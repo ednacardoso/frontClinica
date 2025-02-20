@@ -31,25 +31,35 @@ class _RealizarAgendamentoScreenState extends State<RealizarAgendamentoScreen> {
   String? userRole; // Add this to track user role
   List<Map<String, dynamic>> clients = []; // Add this for admin to select clients 
 
-  @override
-  void initState() {
-    super.initState();
-    _getUserRole();
-    carregarFuncionarios();
+ @override
+void initState() {
+  super.initState();
+  _getUserRole();
+  carregarFuncionarios();
 
-    // Se o usuário for um cliente, define o clienteSelecionado como o userId
-    if (widget.userType == 'cliente') {
-      clienteSelecionado = widget.userId;
-    } else {
-      // Se for administrador ou funcionário, carrega a lista de clientes
-      carregarClientes();
-    }
+  if (widget.userType == 'cliente') {
+    getClienteId(widget.userId).then((clienteId) {
+      setState(() {
+        clienteSelecionado = clienteId;
+      });
+      debugPrint("Cliente logado (clienteId) atribuído: $clienteSelecionado");
+    });
+  } else {
+    carregarClientes();
   }
+}
 
-  Future<void> _getUserRole() async {
-    final prefs = await SharedPreferences.getInstance();    
+
+  Future<void> _getUserRole() async {   
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('userId', widget.userId);
+
+    int? userId = prefs.getInt('userId');
+    debugPrint("User ID recuperado: $userId");
+      
     final role = prefs.getString('userRole');
-    print("User Role from SharedPreferences: $role"); 
+    debugPrint("User Role from SharedPreferences: $role"); 
     
     setState(() {
       userRole = role;
@@ -57,42 +67,36 @@ class _RealizarAgendamentoScreenState extends State<RealizarAgendamentoScreen> {
   }
 
  Future<void> carregarClientes() async {
+  
   final response = await http.get(Uri.parse('http://localhost:5118/api/clientes'));
-  print("Resposta da API de clientes: ${response.body}");
+  debugPrint("Resposta da API de clientes: ${response.body}");
 
   if (response.statusCode == 200) {
-    final Map<String, dynamic> data = json.decode(response.body);
-
-    if (data.containsKey("\$values") && data["\$values"] is List) {
-      setState(() {
-        clients = List<Map<String, dynamic>>.from(data["\$values"]);
-      });
-    } else {
-      throw Exception('Formato inesperado da resposta da API de clientes');
-    }
+    // Directly parse as List
+    final List<dynamic> data = json.decode(response.body);
+    setState(() {
+      clients = List<Map<String, dynamic>>.from(data);
+    });
   } else {
     throw Exception('Erro ao carregar clientes');
   }
 }
 
-  Future<void> carregarFuncionarios() async {
+Future<void> carregarFuncionarios() async {
   final response = await http.get(Uri.parse('http://localhost:5118/api/funcionarios'));
   print("Resposta da API de funcionários: ${response.body}");
 
   if (response.statusCode == 200) {
-    final Map<String, dynamic> data = json.decode(response.body);
-
-    if (data.containsKey("\$values") && data["\$values"] is List) {
-      setState(() {
-        funcionarios = List<Map<String, dynamic>>.from(data["\$values"]);
-      });
-    } else {
-      throw Exception('Formato inesperado da resposta da API de funcionários');
-    }
+    // Directly parse as List
+    final List<dynamic> data = json.decode(response.body);
+    setState(() {
+      funcionarios = List<Map<String, dynamic>>.from(data);
+    });
   } else {
     throw Exception('Erro ao carregar funcionários');
   }
 }
+
 
 
   Future<void> selecionarData(BuildContext context) async {
@@ -123,55 +127,83 @@ class _RealizarAgendamentoScreenState extends State<RealizarAgendamentoScreen> {
     }
   }
 
+  Future<bool> verificarCliente(int clienteId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('http://localhost:5118/api/clientes/$clienteId')
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint('Erro ao verificar cliente: $e');
+      return false;
+    }
+  }
+
+  Future<int?> getClienteId(int userId) async {
+    final response = await http.get(
+      Uri.parse('http://localhost:5118/api/clientes/cliente/$userId')
+    );
+    
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      return data['id'];
+    }
+    return null;
+  }
+
   void enviarAgendamento() async {
   try {
-    print("Cliente selecionado antes do envio: $clienteSelecionado");
-    print("Função enviarAgendamento() foi chamada!");
-
-    int clienteId;
-    if (widget.userType == 'cliente') {
-      // Se o usuário for um cliente, usa o userId como clienteId
-      clienteId = widget.userId;
-    } else {
-      // Se for administrador ou funcionário, usa o cliente selecionado
-      if (clienteSelecionado == null) {
-        throw Exception('Por favor, selecione um cliente');
-      }
-      clienteId = clienteSelecionado!;
+    if (clienteSelecionado == null) {
+      throw Exception('Por favor selecione um cliente');
+    }
+    if (funcionarioSelecionado == null) {
+      throw Exception('Por favor selecione um funcionário');
+    }
+    if (dataAgendamento == null) {
+      throw Exception('Por favor selecione uma data e hora');
     }
 
-    if (funcionarioSelecionado == null || dataAgendamento == null) {
-      throw Exception("Preencha todos os campos obrigatórios!");
-    }
-
-    final agendamento = {
-      "clienteId": clienteId,
-      "funcionarioId": funcionarioSelecionado,
+    final agendamento = {  
+      "clienteId": clienteSelecionado,
+      "funcionarioId": funcionarioSelecionado,  
       "dataAgendamento": dataAgendamento?.toUtc().toIso8601String(),
-      "status": statusSelecionado.toLowerCase(),
+      "status": statusSelecionado,
       "observacoes": observacoesController.text,
-      "motivoCancelamento": statusSelecionado == "Cancelado" ? motivoCancelamentoController.text : null,      
+      "motivoCancelamento": null,  
     };
 
-    print("Dados sendo enviados: ${jsonEncode(agendamento)}");
+    debugPrint("Dados do agendamento: ${jsonEncode(agendamento)}");
 
     final response = await http.post(
-      Uri.parse('http://localhost:5118/api/agenda'),
+      Uri.parse('http://localhost:5118/api/agendamentos'),
       headers: {"Content-Type": "application/json"},
       body: jsonEncode(agendamento),
     );
 
-    print("Resposta da API: ${response.statusCode} - ${response.body}");
-
     if (response.statusCode == 201) {
+      if (!context.mounted) return;
+      
+      // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Agendamento realizado com sucesso!")),
+        const SnackBar(
+          content: Text("Agendamento realizado com sucesso!"),
+          duration: Duration(seconds: 3),
+        ),
       );
+
+      // Add delay to show the message
+      await Future.delayed(const Duration(seconds: 3));
+
+      if (!context.mounted) return;
+      // Simply pop the current screen
+      Navigator.of(context).pop();
+      
     } else {
       throw Exception("Erro ao agendar: ${response.body}");
     }
   } catch (e) {
-    print("Erro no envio do agendamento: $e");
+    debugPrint("Erro no agendamento: $e");
+    if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(e.toString())),
     );

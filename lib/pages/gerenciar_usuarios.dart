@@ -1,8 +1,8 @@
-
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-
+import 'package:shared_preferences/shared_preferences.dart';
+import 'registro_usuario.dart';
 
 class GerenciarUsuariosScreen extends StatefulWidget {
   const GerenciarUsuariosScreen({super.key});
@@ -21,41 +21,90 @@ class _GerenciarUsuariosScreenState extends State<GerenciarUsuariosScreen> {
   }
 
   Future<List<dynamic>> _carregarUsuarios() async {
-  final response = await http.get(
-    Uri.parse('http://localhost:5118/api/users'),
-    headers: {'Content-Type': 'application/json'},
-  );
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('jwt_token') ?? '';
 
-  if (response.statusCode == 200) {
-    final Map<String, dynamic> data = json.decode(response.body);
+    final response = await http.get(
+      Uri.parse('http://localhost:5118/api/auth/admin-only'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json'
+      },
+    );
 
-    if (data.containsKey("\$values")) {
-      // Garante que os IDs sejam numéricos e não nulos
-      return (data["\$values"] as List).map((usuario) {
-        return {
-          "id": usuario["userId"] ?? 0, // Define 0 caso seja nulo
-          "nome": usuario["nome"] ?? "Sem Nome",
-          "email": usuario["email"] ?? "Sem Email",
-          "tipo": usuario["tipo"] ?? "desconhecido",
-        };
-      }).toList();
-    } else {
-      throw Exception('Formato inesperado na resposta da API');
+    if (response.statusCode == 200) {
+      final Map<String, dynamic> data = json.decode(response.body);
+      if (data.containsKey("values")) {
+        return (data["values"] as List).map((usuario) {
+          return {
+            "id": usuario["userId"] ?? 0,
+            "nome": usuario["nome"] ?? "Sem Nome",
+            "email": usuario["email"] ?? "Sem Email",
+            "tipo": usuario["tipo"] ?? "desconhecido",
+          };
+        }).toList();
+      }
     }
-  } else {
     throw Exception('Falha ao carregar usuários');
   }
-}
 
+  Future<void> resetarSenha(BuildContext context, int userId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('jwt_token') ?? '';
 
+    try {
+      final response = await http.post(
+        Uri.parse('http://localhost:5118/api/auth/reset-password/$userId'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json'
+        },
+      );
+
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Senha resetada com sucesso!')),
+        );
+      } else {
+        throw Exception('Falha ao resetar senha');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao resetar senha: $e')),
+      );
+    }
+  }
 
   void _navegarParaTelaAdicao(BuildContext context, String tipo) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => AdicionarUsuarioScreen(tipo: tipo),
+        builder: (context) => RegisterScreen(tipo: tipo),
       ),
     );
+  }
+
+  Future<void> excluirUsuario(BuildContext context, int id) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('jwt_token') ?? '';
+
+    final response = await http.delete(
+      Uri.parse('http://localhost:5118/api/users/$id'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json'
+      },
+    );
+
+    if (response.statusCode == 200) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Usuário excluído com sucesso!')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao excluir usuário')),
+      );
+    }
   }
 
   @override
@@ -63,31 +112,31 @@ class _GerenciarUsuariosScreenState extends State<GerenciarUsuariosScreen> {
     return Scaffold(
       appBar: AppBar(title: Text('Gerenciar Usuários')),
       body: Column(
-  mainAxisAlignment: MainAxisAlignment.center,
-  crossAxisAlignment: CrossAxisAlignment.stretch,
-  children: [
-    Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      child: ElevatedButton(
-        onPressed: () => _navegarParaTelaAdicao(context, 'cliente'),
-        child: const Text('Adicionar Cliente'),
-      ),
-    ),
-    Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      child: ElevatedButton(
-        onPressed: () => _navegarParaTelaAdicao(context, 'funcionario'),
-        child: const Text('Adicionar Funcionário'),
-      ),
-    ),
-    Expanded(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            child: ElevatedButton(
+              onPressed: () => _navegarParaTelaAdicao(context, 'cliente'),
+              child: const Text('Adicionar Cliente'),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            child: ElevatedButton(
+              onPressed: () => _navegarParaTelaAdicao(context, 'funcionario'),
+              child: const Text('Adicionar Funcionário'),
+            ),
+          ),
+          Expanded(
             child: FutureBuilder<List<dynamic>>(
               future: _usuarios,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return Center(child: CircularProgressIndicator());
                 }
-                
+
                 if (snapshot.hasError) {
                   return Center(child: Text('Erro ao carregar usuários'));
                 }
@@ -106,14 +155,28 @@ class _GerenciarUsuariosScreenState extends State<GerenciarUsuariosScreen> {
                       ...clientes.map((cliente) => ListTile(
                         title: Text(cliente['nome']),
                         subtitle: Text(cliente['email']),
-                        trailing: IconButton(
-                          icon: Icon(Icons.delete),
-                          onPressed: () async {
-                            await excluirUsuario(context, cliente['id']);
-                            setState(() {
-                              _usuarios = _carregarUsuarios();
-                            });
-                          },
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: Icon(Icons.lock_reset),
+                              onPressed: () async {
+                                await resetarSenha(context, cliente['id']);
+                                setState(() {
+                                  _usuarios = _carregarUsuarios();
+                                });
+                              },
+                            ),
+                            IconButton(
+                              icon: Icon(Icons.delete),
+                              onPressed: () async {
+                                await excluirUsuario(context, cliente['id']);
+                                setState(() {
+                                  _usuarios = _carregarUsuarios();
+                                });
+                              },
+                            ),
+                          ],
                         ),
                       )),
                     ],
@@ -125,14 +188,28 @@ class _GerenciarUsuariosScreenState extends State<GerenciarUsuariosScreen> {
                       ...funcionarios.map((funcionario) => ListTile(
                         title: Text(funcionario['nome']),
                         subtitle: Text('${funcionario['email']} - ${funcionario['especialidade']}'),
-                        trailing: IconButton(
-                          icon: Icon(Icons.delete),
-                          onPressed: () async {
-                            await excluirUsuario(context, funcionario['id']);
-                            setState(() {
-                              _usuarios = _carregarUsuarios();
-                            });
-                          },
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: Icon(Icons.lock_reset),
+                              onPressed: () async {
+                                await resetarSenha(context, funcionario['id']);
+                                setState(() {
+                                  _usuarios = _carregarUsuarios();
+                                });
+                              },
+                            ),
+                            IconButton(
+                              icon: Icon(Icons.delete),
+                              onPressed: () async {
+                                await excluirUsuario(context, funcionario['id']);
+                                setState(() {
+                                  _usuarios = _carregarUsuarios();
+                                });
+                              },
+                            ),
+                          ],
                         ),
                       )),
                     ],
@@ -145,205 +222,4 @@ class _GerenciarUsuariosScreenState extends State<GerenciarUsuariosScreen> {
       ),
     );
   }
-} 
-Future<void> excluirUsuario(BuildContext context, int id) async {
-  final response = await http.delete(
-    Uri.parse('http://localhost:5118/api/users/$id'),
-  );
-
-  if (response.statusCode == 200) {
-    ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Usuário excluído com sucesso!')));
-  } else {
-    ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erro ao excluir usuário')));
-  }
 }
-
-class AdicionarUsuarioScreen extends StatefulWidget {
-  final String tipo; // 'cliente' ou 'funcionario'
-
-  const AdicionarUsuarioScreen({super.key, required this.tipo});
-
-  @override
-  _AdicionarUsuarioScreenState createState() => _AdicionarUsuarioScreenState();
-}
-  class _AdicionarUsuarioScreenState extends State<AdicionarUsuarioScreen> {
-    final _formKey = GlobalKey<FormState>();
-    final _nomeController = TextEditingController();
-    final _emailController = TextEditingController();
-    final _senhaController = TextEditingController();
-    final _cpfController = TextEditingController();
-    final _apelidoController = TextEditingController();
-    final _telefoneController = TextEditingController();
-    final _especialidadeController = TextEditingController();
-    final _dataNascimentoController = TextEditingController();
-
-    Future<void> criarUsuario() async {
-      if (_formKey.currentState!.validate()) {
-        try {
-
-          final date = DateTime.parse(_dataNascimentoController.text).toUtc();
-          final formattedDate = date.toIso8601String();
-
-          final usuario = {
-            'nome': _nomeController.text,
-            'email': _emailController.text,
-            'senha': _senhaController.text,
-            'cpf': _cpfController.text,
-            'apelido': _apelidoController.text,
-            'telefone': _telefoneController.text,
-            'especialidade': widget.tipo == 'funcionario' ? _especialidadeController.text : '',
-            'dataNascimento': formattedDate,
-            'tipo': widget.tipo,  // 'cliente' ou 'funcionario'
-          };
-
-          final response = await http.post(
-            Uri.parse('http://localhost:5118/api/users'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode(usuario),
-          );
-
-          if (response.statusCode == 200) {
-            ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Usuário criado com sucesso!')));
-            Navigator.pop(context); // Return to previous screen
-          } else {
-            throw Exception('Falha ao criar usuário');
-          }
-        } catch (e) {
-          ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Erro ao criar usuário: $e')));
-        }
-      }
-    }
-
-    @override
-    Widget build(BuildContext context) {
-      return Scaffold(
-        appBar: AppBar(title: Text('Adicionar ${widget.tipo}')),
-        body: Form(
-          key: _formKey,
-          child: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                children: [
-                  TextFormField(
-                    controller: _nomeController,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Por favor, insira um nome';
-                      }
-                      return null;
-                    },
-                    decoration: InputDecoration(labelText: 'Nome'),
-                  ),
-                  TextFormField(
-                    controller: _emailController,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Por favor, insira um email';
-                      }
-                      return null;
-                    },
-                    decoration: InputDecoration(labelText: 'Email'),
-                  ),
-                  TextFormField(
-                    controller: _senhaController,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Por favor, insira uma senha';
-                      }
-                      return null;
-                    },
-                    decoration: InputDecoration(labelText: 'Senha'),
-                  ),
-                  TextFormField(
-                    controller: _cpfController,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Por favor, insira um CPF';
-                      }
-                      return null;
-                    },
-                    decoration: InputDecoration(labelText: 'CPF'),
-                  ),
-                  TextFormField(
-                    controller: _apelidoController,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Por favor, insira um apelido';
-                      }
-                      return null;
-                    },
-                    decoration: InputDecoration(labelText: 'Apelido'),
-                  ),
-                  TextFormField(
-                    controller: _telefoneController,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Por favor, insira um telefone';
-                      }
-                      return null;
-                    },
-                    decoration: InputDecoration(labelText: 'Telefone'),
-                  ),
-                  if (widget.tipo == 'funcionario')
-                    TextFormField(
-                      controller: _especialidadeController,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Por favor, insira uma especialidade';
-                        }
-                        return null;
-                      },
-                      decoration: InputDecoration(labelText: 'Especialidade'),
-                    ),
-                  TextFormField(
-                    controller: _dataNascimentoController,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Por favor, insira uma data de nascimento';
-                      }
-                      return null;
-                    },
-                    decoration: InputDecoration(
-                    labelText: 'Data de Nascimento',
-                    suffixIcon: IconButton(
-                      icon: Icon(Icons.calendar_today),
-                      onPressed: () async {
-                        final DateTime? picked = await showDatePicker(
-                          context: context,
-                          initialDate: DateTime.now(),
-                          firstDate: DateTime(1900),
-                          lastDate: DateTime.now(),
-                        );
-                        if (picked != null) {
-                          _dataNascimentoController.text = 
-                              "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
-                        }
-                      },
-                    ),
-                  ),
-                  readOnly: true,                
-                ),
-                 SizedBox(height: 20), // Adds some spacing
-                  ElevatedButton(
-                    onPressed: criarUsuario,
-                    style: ElevatedButton.styleFrom(
-                      padding: EdgeInsets.symmetric(horizontal: 50, vertical: 15),
-                    ),
-                    child: Text(
-                      'Salvar ${widget.tipo}',
-                      style: TextStyle(fontSize: 16),
-                    ),
-                  )
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-  }
